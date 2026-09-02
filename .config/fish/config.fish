@@ -21,6 +21,7 @@ end
 # pnpm end
 
 alias c "code -n"
+alias gs 'git_switch'
 
 # Added by LM Studio CLI (lms)
 set -gx PATH $PATH $HOME/.cache/lm-studio/bin
@@ -59,14 +60,37 @@ source "$HOME/.config/agterm/agent-status/shell/integration.fish"
 test -r "$HOME/.config/shell/secrets.fish"; and source "$HOME/.config/shell/secrets.fish"
 
 function git_switch
-    set -l branches (git branch --format='%(refname:short)')
+    set -l branches branch branch_name current_root selected selected_parts worktree_path
+    set current_root (command git rev-parse --show-toplevel)
     or return
-    set -l branch (string join \n $branches | fzf --height 40% --border --prompt 'Select a branch: ')
+    if not command -q fzf
+        echo 'git_switch: fzf is required' >&2
+        return 1
+    end
+    set branches (
+        command git for-each-ref --format='%(refname:short)' refs/heads/ |
+        while read -l branch_name
+            set worktree_path (
+                command git worktree list --porcelain | awk -v selected_branch="refs/heads/$branch_name" '
+                    $1 == "worktree" { path = substr($0, 10) }
+                    $1 == "branch" && $2 == selected_branch { print path; exit }
+                '
+            )
+            if test -n "$worktree_path"
+                printf '%s\t%s\n' "$branch_name" "$worktree_path"
+            else
+                printf '%s\t(no worktree)\n' "$branch_name"
+            end
+        end
+    )
     or return
-    set -l current_root (git rev-parse --show-toplevel)
+    set selected (string join \n $branches | fzf --height 40% --border --prompt 'Select a branch: ')
     or return
-    set -l worktree_path (
-        git worktree list --porcelain | awk -v selected_branch="refs/heads/$branch" '
+    set selected_parts (string split -m 1 \t -- "$selected")
+    set branch $selected_parts[1]
+    test -n "$branch"; or return
+    set worktree_path (
+        command git worktree list --porcelain | awk -v selected_branch="refs/heads/$branch" '
             $1 == "worktree" { path = substr($0, 10) }
             $1 == "branch" && $2 == selected_branch { print path; exit }
         '
@@ -75,5 +99,5 @@ function git_switch
         cd "$worktree_path"; or return
         return
     end
-    git switch "$branch"
+    command git switch -- "$branch"
 end

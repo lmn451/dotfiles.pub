@@ -75,6 +75,7 @@ ZSH_AUTOSUGGEST_STRATEGY=(history completion)
 alias c='code -n'
 alias k='kubectl'
 alias h='helm'
+alias gs='git_switch'
 
 # ===================================================================
 # 5. CUSTOM FUNCTIONS (Restored Workflows)
@@ -139,10 +140,31 @@ pi() {
 }
 
 git_switch() {
-    local branches branch current_root worktree_path
-    branches=$(git branch --format='%(refname:short)') || return
-    branch=$(printf '%s\n' "$branches" | fzf --height 40% --border --prompt 'Select a branch: ') || return
+    local branches branch branch_name current_root selected worktree_path
     current_root=$(git rev-parse --show-toplevel) || return
+    if ! command -v fzf >/dev/null 2>&1; then
+        print -u2 'git_switch: fzf is required'
+        return 1
+    fi
+    branches=$(
+        git for-each-ref --format='%(refname:short)' refs/heads/ |
+        while IFS= read -r branch_name; do
+            worktree_path=$(
+                git worktree list --porcelain | awk -v selected_branch="refs/heads/$branch_name" '
+                    $1 == "worktree" { path = substr($0, 10) }
+                    $1 == "branch" && $2 == selected_branch { print path; exit }
+                '
+            )
+            if [[ -n "$worktree_path" ]]; then
+                printf '%s\t%s\n' "$branch_name" "$worktree_path"
+            else
+                printf '%s\t(no worktree)\n' "$branch_name"
+            fi
+        done
+    ) || return
+    selected=$(printf '%s\n' "$branches" | fzf --height 40% --border --prompt 'Select a branch: ') || return
+    branch="${selected%%$'\t'*}"
+    [[ -n "$branch" ]] || return
     worktree_path=$(
         git worktree list --porcelain | awk -v selected_branch="refs/heads/$branch" '
             $1 == "worktree" { path = substr($0, 10) }
@@ -153,7 +175,7 @@ git_switch() {
         cd "$worktree_path" || return
         return
     fi
-    git switch "$branch"
+    git switch -- "$branch"
 }
 
 
@@ -208,7 +230,7 @@ fi
 export PATH="$HOME/.local/bin:$PATH"
 
 # >>> agterm agent-status >>>
-source $HOME/.config/agterm/agent-status/shell/integration.sh
+source "$HOME/.config/agterm/agent-status/shell/integration.sh"
 # <<< agterm agent-status <<<
 
 # Added by LM Studio CLI (lms)
