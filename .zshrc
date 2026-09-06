@@ -147,7 +147,7 @@ git_switch() {
         return 1
     fi
     branches=$(
-        git for-each-ref --format='%(refname:short)' refs/heads/ |
+        git for-each-ref --sort=-committerdate --format='%(refname:short)' refs/heads/ |
         while IFS= read -r branch_name; do
             worktree_path=$(
                 git worktree list --porcelain | awk -v selected_branch="refs/heads/$branch_name" '
@@ -239,3 +239,6 @@ export PATH="$PATH:$HOME/.cache/lm-studio/bin"
 
 # Local secrets are intentionally stored outside the dotfiles repository.
 [[ -r "$HOME/.config/shell/secrets.zsh" ]] && source "$HOME/.config/shell/secrets.zsh"
+
+# Refresh zsh's command lookup after fnm/PNPM_HOME initialization.
+rehash
